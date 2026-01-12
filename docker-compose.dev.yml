@@ -1,0 +1,83 @@
+version: '3.8'
+
+# Development override - use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: ./apps/api-gateway/Dockerfile
+      target: builder
+    volumes:
+      - ./apps/api-gateway/src:/app/apps/api-gateway/src
+      - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/database/src:/app/packages/database/src
+    command: pnpm --filter @smart-mail-guardian/api-gateway dev
+    environment:
+      NODE_ENV: development
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: ./apps/dashboard/Dockerfile
+      target: deps
+    volumes:
+      - ./apps/dashboard/src:/app/apps/dashboard/src
+      - ./apps/dashboard/app:/app/apps/dashboard/app
+      - ./apps/dashboard/components:/app/apps/dashboard/components
+    command: pnpm --filter @smart-mail-guardian/dashboard dev
+    environment:
+      NODE_ENV: development
+
+  email-service:
+    build:
+      context: .
+      dockerfile: ./apps/email-service/Dockerfile
+      target: builder
+    volumes:
+      - ./apps/email-service/src:/app/apps/email-service/src
+    command: pnpm --filter @smart-mail-guardian/email-service dev
+    environment:
+      NODE_ENV: development
+
+  ai-engine:
+    volumes:
+      - ./packages/ai-engine/app:/app/app
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    environment:
+      DEBUG: "true"
+      LOG_LEVEL: debug
+
+  # Adminer for database management (dev only)
+  adminer:
+    image: adminer
+    container_name: smg-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - smg-network
+
+  # Redis Commander for Redis management (dev only)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: smg-redis-commander
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: local:redis:6379:0:${REDIS_PASSWORD:-redis123}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - smg-network
