@@ -14,15 +14,14 @@
   "dependencies": {
     "@smart-mail-guardian/database": "workspace:*",
     "@smart-mail-guardian/shared": "workspace:*",
+    "@azure/msal-node": "^2.6.3",
     "axios": "^1.6.7",
     "bullmq": "^5.1.4",
     "dotenv": "^16.4.1",
     "googleapis": "^131.0.0",
     "imap": "^0.8.19",
     "ioredis": "^5.3.2",
-    "mailparser": "^3.6.6",
-    "msal-node": "^0.0.1",
-    "@azure/msal-node": "^2.6.3"
+    "mailparser": "^3.6.6"
   },
   "devDependencies": {
     "@types/imap": "^0.8.40",
