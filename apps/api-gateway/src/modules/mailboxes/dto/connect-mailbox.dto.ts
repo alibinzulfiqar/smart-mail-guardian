@@ -11,11 +11,11 @@ export enum ProviderType {
 export class ConnectMailboxDto {
   @ApiProperty({ enum: ProviderType, example: 'GMAIL' })
   @IsEnum(ProviderType)
-  provider: ProviderType;
+  provider!: ProviderType;
 
   @ApiProperty({ example: 'user@gmail.com' })
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiProperty({ example: 'My Gmail', required: false })
   @IsString()

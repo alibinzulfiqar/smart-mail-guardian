@@ -13,7 +13,7 @@ const connection = new IORedis({
 const analysisQueue = new Queue('email-analysis', { connection });
 
 export class EmailProcessor {
-  async saveEmail(mailboxId: string, email: NormalizedEmail) {
+  async saveEmail(mailboxId: string, email: NormalizedEmail): Promise<any> {
     // Check if email already exists
     const existing = await prisma.email.findUnique({
       where: {

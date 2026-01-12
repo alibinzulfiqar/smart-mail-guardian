@@ -51,7 +51,7 @@ export class ImapProvider implements EmailProvider {
             struct: true,
           });
 
-          fetch.on('message', (msg, seqno) => {
+          fetch.on('message', (msg, _seqno) => {
             let buffer = '';
 
             msg.on('body', (stream) => {
@@ -65,12 +65,19 @@ export class ImapProvider implements EmailProvider {
                 try {
                   const parsed = await simpleParser(buffer);
                   
+                  const toAddresses = parsed.to;
+                  const ccAddresses = parsed.cc;
+                  
                   const email: NormalizedEmail = {
                     externalId: attrs.uid.toString(),
                     from: parsed.from?.value[0]?.address || '',
                     fromName: parsed.from?.value[0]?.name || '',
-                    to: parsed.to?.value?.map((a) => a.address || '') || [],
-                    cc: parsed.cc?.value?.map((a) => a.address || '') || [],
+                    to: Array.isArray(toAddresses) 
+                      ? toAddresses.flatMap(a => a.value?.map(v => v.address || '') || [])
+                      : toAddresses?.value?.map((a: any) => a.address || '') || [],
+                    cc: Array.isArray(ccAddresses)
+                      ? ccAddresses.flatMap(a => a.value?.map(v => v.address || '') || [])
+                      : ccAddresses?.value?.map((a: any) => a.address || '') || [],
                     subject: parsed.subject || '',
                     bodyText: parsed.text,
                     bodyHtml: parsed.html || undefined,

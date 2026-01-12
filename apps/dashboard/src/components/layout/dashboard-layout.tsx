@@ -15,7 +15,6 @@ import {
   Moon,
   Sun,
   Bell,
-  ChevronDown,
   Link as LinkIcon,
   History,
 } from 'lucide-react';

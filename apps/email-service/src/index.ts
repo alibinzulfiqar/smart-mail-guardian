@@ -32,16 +32,21 @@ const syncWorker = new Worker(
     }
 
     let provider;
+    const mailboxConfig = {
+      ...mailbox,
+      settings: (mailbox.settings as Record<string, any>) || {},
+    };
+    
     switch (mailbox.provider) {
       case 'GMAIL':
-        provider = new GmailProvider(mailbox);
+        provider = new GmailProvider(mailboxConfig);
         break;
       case 'OUTLOOK':
-        provider = new OutlookProvider(mailbox);
+        provider = new OutlookProvider(mailboxConfig);
         break;
       case 'IMAP':
       case 'YAHOO':
-        provider = new ImapProvider(mailbox);
+        provider = new ImapProvider(mailboxConfig);
         break;
       default:
         throw new Error(`Unsupported provider: ${mailbox.provider}`);

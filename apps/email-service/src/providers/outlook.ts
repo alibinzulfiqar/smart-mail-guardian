@@ -1,13 +1,12 @@
-import { ConfidentialClientApplication } from '@azure/msal-node';
 import axios from 'axios';
 import type { EmailProvider, NormalizedEmail, MailboxConfig } from '../types';
 
 export class OutlookProvider implements EmailProvider {
-  private config: MailboxConfig;
+  private _config: MailboxConfig;
   private accessToken: string;
 
   constructor(mailbox: MailboxConfig) {
-    this.config = mailbox;
+    this._config = mailbox;
     this.accessToken = mailbox.accessToken;
   }
 

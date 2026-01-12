@@ -5,10 +5,10 @@ import IORedis from 'ioredis';
 
 @Injectable()
 export class QueueService implements OnModuleInit, OnModuleDestroy {
-  private connection: IORedis;
-  private emailSyncQueue: Queue;
-  private emailAnalysisQueue: Queue;
-  private urlScanQueue: Queue;
+  private connection!: IORedis;
+  private emailSyncQueue!: Queue;
+  private emailAnalysisQueue!: Queue;
+  private urlScanQueue!: Queue;
 
   constructor(private readonly configService: ConfigService) {}
 

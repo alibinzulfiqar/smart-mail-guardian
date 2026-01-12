@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { Worker, Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import axios from 'axios';
-import { prisma, EmailStatus, ThreatLevel, ActionTaken } from '@smart-mail-guardian/database';
+import { prisma, EmailStatus, RiskLevel, EventSeverity } from '@smart-mail-guardian/database';
 import { RISK_THRESHOLDS, THREAT_WEIGHTS } from '@smart-mail-guardian/shared';
 
 const connection = new IORedis({
@@ -53,25 +53,24 @@ const analysisWorker = new Worker(
 
       // Calculate overall risk score
       const riskScore = calculateRiskScore(aiResult);
-      const threatLevel = determineThreatLevel(riskScore);
+      const riskLevel = determineRiskLevel(riskScore);
 
       // Save analysis result
       const analysis = await prisma.aIAnalysisResult.create({
         data: {
           emailId,
-          phishingScore: aiResult.phishing_score,
-          spamScore: aiResult.spam_score,
-          malwareScore: aiResult.malware_score,
-          socialEngineeringScore: aiResult.social_engineering_score,
-          overallRiskScore: riskScore,
-          threatLevel,
-          confidence: aiResult.confidence,
-          threatTypes: aiResult.threat_types,
-          indicators: {
-            urgency: aiResult.urgency_indicators,
-            urls: aiResult.extracted_urls,
-          },
+          phishingScore: Math.round(aiResult.phishing_score * 100),
+          spamScore: Math.round(aiResult.spam_score * 100),
+          malwareScore: Math.round(aiResult.malware_score * 100),
+          socialEngineeringScore: Math.round(aiResult.social_engineering_score * 100),
+          riskScore,
+          riskLevel,
+          reasons: aiResult.threat_types,
+          detectedPatterns: aiResult.urgency_indicators,
           explanation: aiResult.explanation,
+          modelVersion: '1.0.0',
+          urlAnalysis: { urls: aiResult.extracted_urls, confidence: aiResult.confidence },
+          senderReputation: { score: aiResult.sender_reputation },
         },
       });
 
@@ -80,47 +79,59 @@ const analysisWorker = new Worker(
         where: { id: emailId },
         data: {
           riskScore,
-          status: getEmailStatus(threatLevel),
+          riskLevel,
+          status: getEmailStatus(riskLevel),
         },
       });
 
       // Queue URL scanning if suspicious URLs found
-      if (aiResult.extracted_urls.length > 0 && riskScore > RISK_THRESHOLDS.LOW) {
+      if (aiResult.extracted_urls.length > 0 && riskScore > RISK_THRESHOLDS.SAFE_MAX) {
         for (const url of aiResult.extracted_urls) {
           await urlScanQueue.add('scan', { emailId, url });
         }
       }
 
       // Create security event for high-risk emails
-      if (threatLevel === ThreatLevel.HIGH || threatLevel === ThreatLevel.CRITICAL) {
+      if (riskLevel === RiskLevel.DANGEROUS) {
         await prisma.securityEvent.create({
           data: {
             userId: email.mailbox.userId,
             emailId,
             eventType: 'THREAT_DETECTED',
-            threatLevel,
+            severity: EventSeverity.CRITICAL,
+            title: 'High-Risk Email Detected',
             description: `Threat detected: ${aiResult.threat_types.join(', ')}`,
             metadata: {
               riskScore,
               confidence: aiResult.confidence,
             },
-            actionTaken: threatLevel === ThreatLevel.CRITICAL 
-              ? ActionTaken.QUARANTINED 
-              : ActionTaken.LABELED,
           },
         });
 
-        // Quarantine critical emails
-        if (threatLevel === ThreatLevel.CRITICAL) {
-          await prisma.email.update({
-            where: { id: emailId },
-            data: { status: EmailStatus.QUARANTINED },
-          });
-        }
+        // Quarantine dangerous emails
+        await prisma.email.update({
+          where: { id: emailId },
+          data: { status: EmailStatus.QUARANTINED },
+        });
+      } else if (riskLevel === RiskLevel.SUSPICIOUS) {
+        await prisma.securityEvent.create({
+          data: {
+            userId: email.mailbox.userId,
+            emailId,
+            eventType: 'THREAT_DETECTED',
+            severity: EventSeverity.WARNING,
+            title: 'Suspicious Email Detected',
+            description: `Suspicious patterns: ${aiResult.threat_types.join(', ')}`,
+            metadata: {
+              riskScore,
+              confidence: aiResult.confidence,
+            },
+          },
+        });
       }
 
-      console.log(`✅ Analysis complete for ${emailId}: Risk=${riskScore}, Level=${threatLevel}`);
-      return { riskScore, threatLevel, analysisId: analysis.id };
+      console.log(`✅ Analysis complete for ${emailId}: Risk=${riskScore}, Level=${riskLevel}`);
+      return { riskScore, riskLevel, analysisId: analysis.id };
 
     } catch (error: any) {
       console.error(`❌ Analysis failed for ${emailId}:`, error.message);
@@ -198,31 +209,28 @@ function fallbackAnalysis(email: any): AIAnalysisResult {
 function calculateRiskScore(result: AIAnalysisResult): number {
   const weightedScore = 
     result.phishing_score * THREAT_WEIGHTS.phishing +
-    result.spam_score * THREAT_WEIGHTS.spam +
+    result.spam_score * 10 +
     result.malware_score * THREAT_WEIGHTS.malware +
-    result.social_engineering_score * THREAT_WEIGHTS.socialEngineering +
-    (1 - result.sender_reputation) * THREAT_WEIGHTS.senderReputation;
+    result.social_engineering_score * THREAT_WEIGHTS.social_engineering +
+    (1 - result.sender_reputation) * 15;
 
   return Math.round(Math.min(weightedScore * 100, 100));
 }
 
-function determineThreatLevel(riskScore: number): ThreatLevel {
-  if (riskScore >= RISK_THRESHOLDS.CRITICAL) return ThreatLevel.CRITICAL;
-  if (riskScore >= RISK_THRESHOLDS.HIGH) return ThreatLevel.HIGH;
-  if (riskScore >= RISK_THRESHOLDS.MEDIUM) return ThreatLevel.MEDIUM;
-  if (riskScore >= RISK_THRESHOLDS.LOW) return ThreatLevel.LOW;
-  return ThreatLevel.SAFE;
+function determineRiskLevel(riskScore: number): RiskLevel {
+  if (riskScore >= RISK_THRESHOLDS.DANGEROUS_MIN) return RiskLevel.DANGEROUS;
+  if (riskScore > RISK_THRESHOLDS.SAFE_MAX) return RiskLevel.SUSPICIOUS;
+  return RiskLevel.SAFE;
 }
 
-function getEmailStatus(threatLevel: ThreatLevel): EmailStatus {
-  switch (threatLevel) {
-    case ThreatLevel.CRITICAL:
+function getEmailStatus(riskLevel: RiskLevel): EmailStatus {
+  switch (riskLevel) {
+    case RiskLevel.DANGEROUS:
       return EmailStatus.QUARANTINED;
-    case ThreatLevel.HIGH:
-    case ThreatLevel.MEDIUM:
-      return EmailStatus.SUSPICIOUS;
+    case RiskLevel.SUSPICIOUS:
+      return EmailStatus.ANALYZED;
     default:
-      return EmailStatus.SAFE;
+      return EmailStatus.ANALYZED;
   }
 }
 

@@ -3,10 +3,10 @@ import type { EmailProvider, NormalizedEmail, MailboxConfig } from '../types';
 
 export class GmailProvider implements EmailProvider {
   private gmail;
-  private config: MailboxConfig;
+  private _config: MailboxConfig;
 
   constructor(mailbox: MailboxConfig) {
-    this.config = mailbox;
+    this._config = mailbox;
     
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
