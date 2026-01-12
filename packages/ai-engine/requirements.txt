@@ -10,7 +10,7 @@ python-dotenv==1.0.1
 
 # ML/AI
 transformers==4.37.2
-torch==2.2.0
+# torch installed separately in Dockerfile for CPU-only build
 scikit-learn==1.4.0
 numpy==1.26.4
 nltk==3.8.1
